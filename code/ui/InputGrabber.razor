@@ -1,0 +1,49 @@
+﻿@using System
+@using Sandbox.UI
+@inherits Sandbox.UI.Panel
+
+<div style="height: 100%; width: 100%;">
+    
+</div>
+
+@code {
+
+    public KeyboardEntity activeKeyboard;
+    public int currentKey; 
+    
+    public InputGrabber()
+    {
+        AcceptsFocus = true;
+        ButtonInput = PanelInputType.UI;
+    }
+
+    public override void OnButtonEvent(ButtonEvent e)
+    {
+        if (activeKeyboard != null)
+        {
+            if (e.Pressed)
+            {
+                activeKeyboard.SetButton(e.Button, e.VirtualKey);
+                currentKey = e.VirtualKey;
+                activeKeyboard.SetPressed(true);
+            }
+            else
+            {
+                if (e.VirtualKey == currentKey)
+                {
+                    activeKeyboard.SetPressed(false);
+                }
+            }
+        }
+        base.OnButtonEvent(e);
+    }
+
+    public override void OnKeyTyped(char k)
+    {
+        if (activeKeyboard != null)
+        {
+            activeKeyboard.SetCharacter(k.ToString());
+        }
+        base.OnKeyTyped(k);
+    }
+}

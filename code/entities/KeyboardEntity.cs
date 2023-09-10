@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using Sandbox.UI;
 
 [Library( "ent_wirekeyboard", Title = "Wire Keyboard" )]
 public partial class KeyboardEntity : Prop, IUse, IWireOutputEntity
@@ -9,86 +11,104 @@ public partial class KeyboardEntity : Prop, IUse, IWireOutputEntity
 	public bool IsToggle { get; set; } = false;
 	WirePortData IWireEntity.WirePorts { get; } = new WirePortData();
 
-	private static readonly Dictionary<string, string> inputButtons = new Dictionary<string, string>
+	[ConCmd.Server( "set_keyboard_button")]
+	public static void SetKeyboardButton( string button, int keyCode, int netIdent )
 	{
-		["Forward"] = "Forward", //  W
-		["Backward"] = "Backward", //  S
-		["Left"] = "Left", //  A
-		["Right"] = "Right", //  D
-		["Attack1"] = "Attack1", //  Mouse0
-		["Attack2"] = "Attack2", //  Mouse1
-		["Reload"] = "Reload", //  R
-		["Drop"] = "Drop", //  G
-		["Jump"] = "Jump", //  Spacebar
-		["Run"] = "Run", //  LShift and RShift
-		["Walk"] = "Walk", //  LAlt
-		["Duck"] = "Duck", //  LCtrl and RCtrl
-		["Score"] = "Score", // Tab
-		["Menu"] = "Menu", // Q
-		["Flashlight"] = "Flashlight", // F
-		["View"] = "View", // C
-		["Voice"] = "Voice", // V
-		["Slot1"] = "Slot1",
-		["Slot2"] = "Slot2",
-		["Slot3"] = "Slot3",
-		["Slot4"] = "Slot4",
-		["Slot5"] = "Slot5",
-		["Slot6"] = "Slot6",
-		["Slot7"] = "Slot7",
-		["Slot8"] = "Slot8",
-		["Slot9"] = "Slot9",
-	};
-
+		KeyboardEntity keyboardEntity = FindByIndex( netIdent ) as KeyboardEntity;
+		keyboardEntity.WireTriggerOutput( "Button", button );
+		keyboardEntity.WireTriggerOutput( "Key Code", keyCode );
+	}
+	
+	[ConCmd.Server( "set_keyboard_character")]
+	public static void SetKeyboardCharacter( string character, int netIdent )
+	{
+		KeyboardEntity keyboardEntity = FindByIndex( netIdent ) as KeyboardEntity;
+		keyboardEntity.WireTriggerOutput( "Character", character );
+	}
+	
+	[ConCmd.Server( "set_keyboard_pressed")]
+	public static void SetKeyboardPressed( bool pressed, int netIdent )
+	{
+		KeyboardEntity keyboardEntity = FindByIndex( netIdent ) as KeyboardEntity;
+		keyboardEntity.WireTriggerOutput( "Pressed", pressed );
+	}
+	
+	[ConCmd.Server("set_keyboard_active")]
+	public static void SetKeyboardActive( bool active, int netIdent )
+	{
+		KeyboardEntity keyboardEntity = FindByIndex( netIdent ) as KeyboardEntity;
+		keyboardEntity.WireTriggerOutput( "Active", active);
+	}
+	
 	public bool IsUsable( Entity user )
 	{
 		return (user as IEntity) is SandboxPlayer;
 	}
+	
 	public bool OnUse( Entity user )
 	{
 		if ( (user as IEntity) is SandboxPlayer player )
 		{
 			if ( player.Controller.GetType() != typeof( LockedPositionController ) )
 			{
-				player.OnSimulate -= OnSimulatePlayer;
-				player.OnSimulate += OnSimulatePlayer;
+				GrabInputs( To.Single( player.Client ), this );
 				player.EnableSolidCollisions = false;
-				player.Controller = new LockedPositionController();
-
 				this.WireTriggerOutput( "Active", true );
 			}
 			else
 			{
-				player.OnSimulate -= OnSimulatePlayer;
 				player.EnableSolidCollisions = true;
-				player.Controller = new WalkController
-				{
-					WalkSpeed = 60f,
-					DefaultSpeed = 180.0f
-				};
-
 				this.WireTriggerOutput( "Active", false );
 			}
 		}
 		return false;
 	}
 
-	private void OnSimulatePlayer( SandboxPlayer player )
+	public void SetButton( string button, int keyCode )
 	{
-		foreach ( var name in inputButtons.Keys )
-		{
-			var inputButton = inputButtons[name];
-			var newState = Input.Down( inputButton );
-			if ( newState != (bool)((IWireOutputEntity)this).GetOutput( name ).value )
-			{
-				this.WireTriggerOutput( name, newState );
-			}
-		}
+		ConsoleSystem.Run("set_keyboard_button", button, keyCode, this.NetworkIdent);
 	}
+
+	public void SetCharacter( string character )
+	{
+		ConsoleSystem.Run("set_keyboard_character", character, this.NetworkIdent);
+	}
+
+	public void SetPressed( bool pressed )
+	{
+		ConsoleSystem.Run( "set_keyboard_pressed", pressed, this.NetworkIdent );
+	}
+
+	public void SetActive( bool active )
+	{
+		ConsoleSystem.Run( "set_keyboard_active", active, this.NetworkIdent );
+	}
+	
+	[ClientRpc]
+	public static void GrabInputs(KeyboardEntity keyboardEntity)
+	{
+		keyboardEntity.WireTriggerOutput( "Active", true );
+		
+		if ( !Game.RootPanel.ChildrenOfType<InputGrabber>().Any() )
+		{
+			Game.RootPanel.AddChild<InputGrabber>();
+		}
+
+		InputGrabber inputGrabber = Game.RootPanel.ChildrenOfType<InputGrabber>().First();
+		inputGrabber.activeKeyboard = keyboardEntity;
+		
+		InputFocus.Set( inputGrabber );
+	}
+
 	public PortType[] WireGetOutputs()
 	{
-		return inputButtons.Keys
-			.Concat( new string[] { "Active" } )
-			.Select( x => PortType.Bool( x ) )
-			.ToArray();
+		List<PortType> portTypes = new List<PortType>();
+		portTypes.Add( PortType.String( "Button" ) );
+		portTypes.Add( PortType.String( "Character" ) );
+		portTypes.Add( PortType.Int( "Key Code" ) );
+		portTypes.Add( PortType.Bool( "Pressed" ) );
+		portTypes.Add( PortType.Bool( "Active" ) );
+
+		return portTypes.ToArray();
 	}
 }
